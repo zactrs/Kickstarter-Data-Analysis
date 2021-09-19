@@ -1,0 +1,96 @@
+/*
+Kickstarter Projects Data Exploration
+Skills used: Joins, Subqueries, Aggregate Functions, Creating Views, Converting Data Types
+*/
+
+-- Create table for importing data. This is a table of kickstarter projects in 2018
+DROP TABLE IF EXISTS projects;
+CREATE TABLE projects 
+(
+id BIGINT,
+title VARCHAR(1000),
+category VARCHAR(50),
+main_category VARCHAR(50),
+currency VARCHAR(4),
+deadline DATE,
+goal DECIMAL(13,2),
+launched TIMESTAMP,
+pledged DECIMAL(13,2),
+state VARCHAR(25),
+backers INT,
+country VARCHAR(4),
+usd_pledged DECIMAL(13,2),
+usd_pledged_real DECIMAL(13,2),
+usd_goal_real DECIMAL(13,2)
+)
+;
+
+-- Import data from csv file
+COPY projects FROM 'C:\Users\User\Desktop\SQL Course\SQL Project\ks-projects-201801.csv' WITH CSV HEADER;
+
+-- Get overview of data
+SELECT * FROM projects;
+
+-- Analyse number of kickstarter projects per category
+SELECT main_category, category, count(*) AS no_of_projects FROM projects
+WHERE main_category != category -- to exclude subtotal rows
+GROUP BY main_category, category
+ORDER BY main_category;
+
+-- Analyse average goal amount of kickstarter projects per category
+SELECT main_category, category, round(avg(usd_goal_real),2) AS average_goal FROM projects
+WHERE main_category != category
+GROUP BY main_category, category
+ORDER BY main_category;
+
+-- Analyse average amount pledged for kickstarter projects per category
+SELECT main_category, category, round(avg(usd_pledged_real),2) AS average_pledged FROM projects
+WHERE main_category != category
+GROUP BY main_category, category
+ORDER BY main_category;
+
+-- Add generated column for calculating (over)subscription for each kickstarter project using goal amount and pledged amount
+ALTER TABLE projects
+ADD COLUMN subscription_pct DECIMAL(13,2) GENERATED ALWAYS AS ((usd_pledged_real/usd_goal_real)*100) STORED;
+-- Analyse average (over)subscription of projects per category 
+SELECT main_category, category, round(avg(subscription_pct),1) AS average_subscription FROM projects
+WHERE main_category != category
+GROUP BY main_category, category
+ORDER BY main_category;
+
+-- Analyse number of projects that met their goal by category
+SELECT main_category, category, COUNT(*) AS succ_raise_no FROM projects
+WHERE main_category != category AND state='successful' 
+GROUP BY main_category, category
+ORDER BY main_category;
+
+-- Create a subquery called t2 to return the number of projects that met their goal by category
+-- Create outer query called t1 to return the total number of projects by category
+-- Combine both with inner join
+-- Return percentage of projects with successful raises by category
+SELECT t1.main_category, t1.category, count(t1.*) AS total_projects, t2.succ_raise_no, ROUND(CAST(t2.succ_raise_no AS DECIMAL(13,2)) / CAST(count(t1.*) AS DECIMAL(13,2)),3) AS pct_succ FROM projects as t1 
+INNER JOIN
+
+(SELECT main_category, category, count(*) AS succ_raise_no FROM projects
+WHERE main_category != category AND state='successful'
+GROUP BY main_category, category
+ORDER BY main_category, category) AS t2
+
+ON t1.category = t2.category
+GROUP BY t1.main_category, t1.category, t2.succ_raise_no
+ORDER BY t1.main_category, t1.category;
+
+-- Create view for data visualisations later on
+CREATE VIEW Percent_Successful_Raise_By_Category AS
+
+SELECT t1.main_category, t1.category, count(t1.*) AS total_projects, t2.succ_raise_no, ROUND(CAST(t2.succ_raise_no AS DECIMAL(13,2)) / CAST(count(t1.*) AS DECIMAL(13,2)),3) AS pct_succ FROM projects as t1 
+INNER JOIN
+
+(SELECT main_category, category, count(*) AS succ_raise_no FROM projects
+WHERE main_category != category AND state='successful'
+GROUP BY main_category, category
+ORDER BY main_category, category) AS t2
+
+ON t1.category = t2.category
+GROUP BY t1.main_category, t1.category, t2.succ_raise_no
+ORDER BY t1.main_category, t1.category;
